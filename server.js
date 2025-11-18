@@ -26,17 +26,6 @@ const dbConfig = {
 // Pool de conexiones
 const pool = mysql.createPool(dbConfig);
 
-// Ruta de prueba de conexión
-app.get('/api/test', async (req, res) => {
-  try {
-    const [rows] = await pool.query('SELECT 1 + 1 AS resultado');
-    res.json({ message: 'Conexión exitosa a la base de datos 🎉', resultado: rows[0].resultado });
-  } catch (error) {
-    console.error('Error de conexión a la BD:', error);
-    res.status(500).json({ error: 'No se pudo conectar a la base de datos' });
-  }
-});
-
 // Middleware de autenticación
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -46,8 +35,8 @@ const authenticateToken = (req, res, next) => {
     return res.status(401).json({ error: 'Token no proporcionado' });
   }
 
-  jwt.verify(token, process.env.JWT_SECRET || 'tu_secreto_jwt_aqui', (err, user) => {
-    if (err) {
+  jwt.verify(token, process.env.JWT_SECRET || 'tu_secreto_jwt_aqui', (error, user) => {
+    if (error) {
       return res.status(403).json({ error: 'Token inválido' });
     }
     req.user = user;
@@ -299,8 +288,8 @@ app.get('/api/tipos-solicitud', authenticateToken, async (req, res) => {
   try {
     const [tipos] = await pool.query(
       `SELECT id, nombre, descripcion, color_hex, requiere_aprobacion 
-       FROM tipos_solicitud 
-       ORDER BY nombre`
+      FROM tipos_solicitud 
+      ORDER BY nombre`
     );
 
     res.json(tipos);
@@ -461,7 +450,7 @@ app.post('/api/solicitudes', authenticateToken, async (req, res) => {
     for (const supervisor of supervisores) {
       await connection.query(
         `INSERT INTO notificaciones (usuario_id, titulo, mensaje, tipo, solicitud_id)
-         VALUES (?, 'Nueva Solicitud', 'Tienes una nueva solicitud pendiente de revisión', 'solicitud', ?)`,
+        VALUES (?, 'Nueva Solicitud', 'Tienes una nueva solicitud pendiente de revisión', 'solicitud', ?)`,
         [supervisor.id, result.insertId]
       );
     }
@@ -469,7 +458,7 @@ app.post('/api/solicitudes', authenticateToken, async (req, res) => {
     // Auditoría
     await connection.query(
       `INSERT INTO auditoria (usuario_id, accion, tabla_afectada, registro_id, detalles)
-       VALUES (?, 'crear_solicitud', 'solicitudes', ?, ?)`,
+      VALUES (?, 'crear_solicitud', 'solicitudes', ?, ?)`,
       [req.user.id, result.insertId, JSON.stringify({ tipo_solicitud_id, dias_solicitados })]
     );
 
@@ -740,6 +729,8 @@ app.get('/api/admin/solicitudes', authenticateToken, async (req, res) => {
 
 // Aprobar solicitud (admin/supervisor)
 app.put('/api/admin/solicitudes/:id/aprobar', authenticateToken, async (req, res) => {
+  console.log('ID solicitud:', req.params.id);
+  console.log('Body recibido:', req.body);
   const connection = await pool.getConnection();
   
   try {
@@ -815,11 +806,11 @@ app.put('/api/admin/solicitudes/:id/rechazar', authenticateToken, async (req, re
     // Actualizar solicitud
     await connection.query(
       `UPDATE solicitudes 
-       SET estado = 'rechazada',
-           aprobado_por = ?,
-           fecha_aprobacion = NOW(),
-           comentarios_aprobador = ?
-       WHERE id = ?`,
+      SET estado = 'rechazada',
+          aprobado_por = ?,
+          fecha_aprobacion = NOW(),
+          comentarios_aprobador = ?
+      WHERE id = ?`,
       [req.user.id, comentarios || 'Solicitud rechazada', solicitudId]
     );
 
@@ -827,15 +818,15 @@ app.put('/api/admin/solicitudes/:id/rechazar', authenticateToken, async (req, re
     const anio = new Date(solicitud.fecha_inicio).getFullYear();
     await connection.query(
       `UPDATE saldos_dias 
-       SET dias_pendientes = dias_pendientes - ?
-       WHERE usuario_id = ? AND tipo_solicitud_id = ? AND anio = ?`,
+      SET dias_pendientes = dias_pendientes - ?
+      WHERE usuario_id = ? AND tipo_solicitud_id = ? AND anio = ?`,
       [solicitud.dias_solicitados, solicitud.usuario_id, solicitud.tipo_solicitud_id, anio]
     );
 
     // Crear notificación
     await connection.query(
       `INSERT INTO notificaciones (usuario_id, titulo, mensaje, tipo, solicitud_id)
-       VALUES (?, 'Solicitud Rechazada', ?, 'rechazo', ?)`,
+      VALUES (?, 'Solicitud Rechazada', ?, 'rechazo', ?)`,
       [solicitud.usuario_id, `Tu solicitud ha sido rechazada. Motivo: ${comentarios || 'No especificado'}`, solicitudId]
     );
 
